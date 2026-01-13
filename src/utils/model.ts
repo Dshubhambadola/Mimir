@@ -6,7 +6,7 @@ export const getModel = () => {
     console.log("Using Local LLM (Ollama)");
     return new ChatOllama({
       baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-      model: "llama3", // or mistral, parameterize if needed
+      model: "llama3.1", // llama3.1 supports tools, llama3 does not
       temperature: 0,
     });
   }

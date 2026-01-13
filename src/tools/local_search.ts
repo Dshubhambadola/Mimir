@@ -1,43 +1,39 @@
-import { HNSWLib } from "@langchain/community/vectorstores/hnswlib";
+import { DynamicTool } from "@langchain/core/tools";
+import { SimpleVectorStore } from "../utils/SimpleVectorStore";
 import { OllamaEmbeddings } from "@langchain/ollama";
-import { tool } from "@langchain/core/tools";
-import { z } from "zod";
 import path from "path";
 import fs from "fs";
 
-// Initialize the vector store loader
-const getVectorStore = async () => {
-    const dbDir = path.resolve(process.cwd(), "data", "vector_store");
-    if (!fs.existsSync(dbDir)) {
-        throw new Error("Vector store not found. Run 'npm run ingest <dir>' first.");
-    }
-
-    const embeddings = new OllamaEmbeddings({
-        model: "llama3",
-        baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-    });
-
-    return await HNSWLib.load(dbDir, embeddings);
-};
-
-export const localSearchTool = tool(
-    async ({ query }) => {
+export const local_codebase_search = new DynamicTool({
+    name: "local_codebase_search",
+    description: "Searches the user's local private codebase for code snippets, error context, or configuration files.",
+    func: async (query: string) => {
         try {
-            const vectorStore = await getVectorStore();
-            const results = await vectorStore.similaritySearch(query, 3);
-            return JSON.stringify(results.map(r => ({
-                content: r.pageContent,
-                source: r.metadata.source
-            })));
-        } catch (error: any) {
-            return `Error searching codebase: ${error.message}`;
+            const dbDir = path.resolve(process.cwd(), "data", "vector_store_json");
+            const storeFile = path.join(dbDir, "store.json");
+
+            if (!fs.existsSync(storeFile)) {
+                return "Error: Local vector store not found. Please run 'npm run ingest /path/to/repo' first.";
+            }
+
+            console.log("Loading SimpleVectorStore from JSON...");
+            const data = fs.readFileSync(storeFile, "utf-8");
+
+            const embeddings = new OllamaEmbeddings({
+                model: "llama3", // matching ingest model
+                baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+            });
+
+            // Rehydrate the memory store
+            const vectorStore = SimpleVectorStore.fromJSON(data, embeddings);
+
+            const results = await vectorStore.similaritySearch(query, 4);
+
+            return results
+                .map((res) => `[Source: ${res.metadata.source}]\n${res.pageContent}`)
+                .join("\n\n---\n\n");
+        } catch (e: any) {
+            return `Error querying local codebase: ${e.message}`;
         }
     },
-    {
-        name: "local_codebase_search",
-        description: "Search the local private codebase for code snippets, architecture, or documentation. Use this when the user asks about the project structure or specific files.",
-        schema: z.object({
-            query: z.string().describe("The search query for the codebase"),
-        }),
-    }
-);
+});

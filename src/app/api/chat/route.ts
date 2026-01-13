@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
                     { version: "v2" }
                 );
 
-                for await (const { event, data, name } of eventStream) {
+                for await (const { event, data, name, metadata } of eventStream) {
                     // Stream "start" events for nodes to visualize the path
                     if (event === "on_chain_start" && (name === "agent" || name === "critic" || name === "tools")) {
                         const packet = { type: "node_start", node: name };
@@ -28,16 +28,25 @@ export async function POST(req: NextRequest) {
                         const packet = { type: "node_end", node: name, output: data.output };
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify(packet)}\n\n`));
                     }
-                    // Stream tokens from the model (for the 'agent' node mainly)
-                    else if (event === "on_chat_model_stream" && (name === "ChatAnthropic" || name === "ChatGoogleGenerativeAI")) {
+                    // Stream tokens from the model (ONLY for the 'agent' node)
+                    // We check metadata.langgraph_node to ensure we only show the main agent's output, not the critic's.
+                    else if (
+                        event === "on_chat_model_stream" &&
+                        data.chunk.content &&
+                        metadata &&
+                        metadata.langgraph_node === "agent"
+                    ) {
                         const token = data.chunk.content;
-                        if (token) {
+                        // Safety: Check if controller is still active
+                        if (controller.desiredSize !== null) {
                             const packet = { type: "token", content: token };
                             controller.enqueue(encoder.encode(`data: ${JSON.stringify(packet)}\n\n`));
                         }
                     }
                 }
-                controller.close();
+                if (controller.desiredSize !== null) {
+                    controller.close();
+                }
             } catch (e) {
                 console.error("Streaming error:", e);
                 controller.error(e);

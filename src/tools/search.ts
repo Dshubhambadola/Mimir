@@ -2,7 +2,7 @@ import { tavily } from "@tavily/core";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-export const searchTool = tool(
+export const tavily_search = tool(
     async ({ query }) => {
         // We assume TAVILY_API_KEY is in process.env
         const tvly = tavily({ apiKey: process.env.TAVILY_API_KEY });

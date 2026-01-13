@@ -31,6 +31,7 @@ export async function criticNode(state: { messages: BaseMessage[] }) {
     // Return the critique in state, AND append a message so the agent sees it in the next loop
     return {
         critique: response,
-        messages: [new HumanMessage(`[Critique] Score: ${response.score}/5. Feedback: ${response.feedback}`)]
+        messages: [new HumanMessage(`[Critique] Score: ${response.score}/5. Feedback: ${response.feedback}`)],
+        retry_count: 1
     };
 }

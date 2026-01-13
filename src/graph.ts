@@ -9,6 +9,7 @@ import { BaseMessage } from "@langchain/core/messages";
 export interface AgentState {
     messages: BaseMessage[];
     critique?: { score: number; feedback: string };
+    retry_count?: number;
 }
 
 // Prebuilt ToolNode checks for tool calls and executes them
@@ -25,6 +26,10 @@ const workflow = new StateGraph<AgentState>({
         critique: {
             value: (x, y) => y, // Overwrite with latest critique
             default: () => undefined,
+        },
+        retry_count: {
+            value: (x, y) => (x || 0) + (y || 1), // Increment retries
+            default: () => 0,
         }
     }
 })
@@ -54,11 +59,17 @@ function shouldContinue(state: { messages: BaseMessage[] }) {
 
 // Logic to determine if we should loop back or end
 function shouldRepeat(state: AgentState) {
-    const { critique } = state;
-    if (critique && critique.score > 4) {
+    const { critique, retry_count } = state;
+
+    // Safety Break: If we've retried more than 3 times, just stop to prevent infinite loops.
+    // Also stop if quality is good enough (> 4/5)
+    // Safety Break: If we've retried more than 3 times, just stop to prevent infinite loops.
+    // Also stop if quality is good enough (> 4/5)
+    if ((retry_count || 0) >= 3 || (critique && critique.score > 4)) {
         return END;
     }
     return "agent";
 }
 
-export const app = workflow.compile();
+// @ts-ignore
+export const app = workflow.compile({ recursionLimit: 50 });

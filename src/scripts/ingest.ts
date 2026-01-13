@@ -1,4 +1,4 @@
-import { HNSWLib } from "@langchain/community/vectorstores/hnswlib";
+import { SimpleVectorStore } from "../utils/SimpleVectorStore";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import * as dotenv from "dotenv";
 import path from "path";
@@ -60,20 +60,30 @@ async function run() {
     console.log(`Created ${docs.length} chunks.`);
 
     // Embed and store
-    console.log("Embedding and storing in HNSWLib...");
+    console.log("Embedding and storing in SimpleVectorStore...");
     const embeddings = new OllamaEmbeddings({
-        model: "llama3", // Ensure you have this pulled in Ollama
+        model: "llama3", // matching ingest model
         baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
     });
 
-    const vectorStore = await HNSWLib.fromDocuments(docs, embeddings);
+    const vectorStore = new SimpleVectorStore(embeddings);
 
-    const dbDir = path.resolve(process.cwd(), "data", "vector_store");
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+        const batch = docs.slice(i, i + BATCH_SIZE);
+        console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(docs.length / BATCH_SIZE)}...`);
+        await vectorStore.addDocuments(batch);
+    }
+
+    // Save to disk by serializing the memory store to JSON
+    const dbDir = path.resolve(process.cwd(), "data", "vector_store_json");
     if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    await vectorStore.save(dbDir);
+    const data = vectorStore.toJSON();
+    fs.writeFileSync(path.join(dbDir, "store.json"), data);
+
     console.log(`Vector store saved to ${dbDir}`);
 }
 
