@@ -1,5 +1,8 @@
 import { Document } from "@langchain/core/documents";
 import { Embeddings } from "@langchain/core/embeddings";
+import * as fs from "fs";
+import * as path from "path";
+import * as readline from "readline";
 
 interface VectorDoc {
     content: string;
@@ -56,14 +59,55 @@ export class SimpleVectorStore {
         return dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
-    // Helper to save/load
-    toJSON() {
-        return JSON.stringify(this.vectors);
+    // New scalable save method (JSONL)
+    async save(directory: string): Promise<void> {
+        if (!fs.existsSync(directory)) {
+            fs.mkdirSync(directory, { recursive: true });
+        }
+        const filePath = path.join(directory, "vectors.jsonl");
+        const stream = fs.createWriteStream(filePath, { flags: 'w' });
+
+        for (const doc of this.vectors) {
+            const line = JSON.stringify(doc) + "\n";
+            if (!stream.write(line)) {
+                // Handle backpressure
+                await new Promise<void>(resolve => stream.once('drain', resolve));
+            }
+        }
+        stream.end();
     }
 
-    static fromJSON(json: string, embeddings: Embeddings): SimpleVectorStore {
+    // New scalable load method (JSONL)
+    static async load(directory: string, embeddings: Embeddings): Promise<SimpleVectorStore> {
         const store = new SimpleVectorStore(embeddings);
-        store.vectors = JSON.parse(json);
+        const filePath = path.join(directory, "vectors.jsonl");
+
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`Vector store file not found at ${filePath}`);
+        }
+
+        const fileStream = fs.createReadStream(filePath);
+        const rl = readline.createInterface({
+            input: fileStream,
+            crlfDelay: Infinity
+        });
+
+        for await (const line of rl) {
+            if (line.trim()) {
+                try {
+                    const doc = JSON.parse(line) as VectorDoc;
+                    store.vectors.push(doc);
+                } catch (e) {
+                    console.warn("Skipping invalid JSON line in vector store");
+                }
+            }
+        }
+
         return store;
+    }
+
+    // Keep legacy for backward compat if needed, but not recommended for large files
+    toJSON() {
+        return JSON.stringify(this.vectors);
     }
 }

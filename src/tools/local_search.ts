@@ -10,14 +10,13 @@ export const local_codebase_search = new DynamicTool({
     func: async (query: string) => {
         try {
             const dbDir = path.resolve(process.cwd(), "data", "vector_store_json");
-            const storeFile = path.join(dbDir, "store.json");
+            const storeFile = path.join(dbDir, "vectors.jsonl");
 
             if (!fs.existsSync(storeFile)) {
                 return "Error: Local vector store not found. Please run 'npm run ingest /path/to/repo' first.";
             }
 
-            console.log("Loading SimpleVectorStore from JSON...");
-            const data = fs.readFileSync(storeFile, "utf-8");
+            console.log("Loading SimpleVectorStore from JSONL...");
 
             const embeddings = new OllamaEmbeddings({
                 model: "llama3", // matching ingest model
@@ -25,7 +24,7 @@ export const local_codebase_search = new DynamicTool({
             });
 
             // Rehydrate the memory store
-            const vectorStore = SimpleVectorStore.fromJSON(data, embeddings);
+            const vectorStore = await SimpleVectorStore.load(dbDir, embeddings);
 
             const results = await vectorStore.similaritySearch(query, 4);
 

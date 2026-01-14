@@ -75,14 +75,14 @@ async function run() {
         await vectorStore.addDocuments(batch);
     }
 
-    // Save to disk by serializing the memory store to JSON
+    // Save to disk by serializing the memory store to JSONL (no memory limit)
     const dbDir = path.resolve(process.cwd(), "data", "vector_store_json");
     if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    const data = vectorStore.toJSON();
-    fs.writeFileSync(path.join(dbDir, "store.json"), data);
+    console.log("Saving vector store to disk (streamed)...");
+    await vectorStore.save(dbDir);
 
     console.log(`Vector store saved to ${dbDir}`);
 }
